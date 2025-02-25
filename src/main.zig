@@ -7,22 +7,23 @@ pub fn main() !void {
 
     //                         1          2            3
     //             1234 5678 9012 3456 7890 1234 5678 9012
-    do_ip_6_thing("2345:0425:2CA1:0000:0000:0567:5673:23b5");
+    const cidr: []const u8 = "2345:0425:2CA1:0000:0000:0567:5673:23b5";
+    _ = cidr.len;
+    do_ip_6_thing(cidr);
     std.debug.print("{s}\n", .{ht.dec_to_hex(15)});
 }
 
 const eight: u32 = 8;
 
-pub fn do_ip_6_thing(cidr: [*:0]const u8) void {
-    std.debug.print("Cidr {s}\n", .{cidr});
+pub fn do_ip_6_thing(cidr: []const u8) void {
+    var ip_as_num: u128 = 0;
+    const previous_part_mask: u128 = 0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_00000000_00000000;
+    const lowest_2_bytes_mask: u128 = ~previous_part_mask;
 
-    var full: u128 = 0;
-    const mask: u128 = 0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111_00000000_00000000;
+    std.debug.print("Input {s}\n", .{cidr});
 
-    const lowest_2_bytes_mask: u128 = ~mask;
-    for (0..235) |i| {
-        const digit: u8 = cidr[i];
-        if (digit == 0 or digit == '/') {
+    for (0..cidr.len, cidr) |_, digit| {
+        if (digit == '/') {
             break;
         }
 
@@ -33,14 +34,11 @@ pub fn do_ip_6_thing(cidr: [*:0]const u8) void {
         const is_not_sep: u7 = 1 - is_sep;
 
         // Shift the number 16 to the left if we're at a ':'
-        full <<= 16 * is_sep;
-
-        // Separate the left parts of the number ( xxx.xxx.xxx. )
-        // so that we don't change it
-        const original_num = (full & mask);
+        // Note : If is_sep was a u1 here, 16 * is_sep would throw a compile error
+        ip_as_num <<= 16 * is_sep;
 
         // Isolate the lowest 2 bytes
-        var lowest_byte = full & lowest_2_bytes_mask;
+        var lowest_byte = ip_as_num & lowest_2_bytes_mask;
 
         // Multiply by 16 so we can add the next character
         // If this is the first character, lowest_byte will be 0
@@ -49,16 +47,16 @@ pub fn do_ip_6_thing(cidr: [*:0]const u8) void {
         // Finally we add the digit itself
         // Note that adding it is always safe, since digit will be 0 if we're at a dot
         lowest_byte += nfc.num_from_char(digit);
-        std.debug.print("Lowest byte {d} digit {d} noot doot {d}\n", .{ lowest_byte, digit, is_not_sep });
+
+        // Separate the left parts of the number ( xxx.xxx.xxx. )
+        // so that we don't change it
+        const original_num = ip_as_num & previous_part_mask;
 
         // Add the new lowest byte with the original left part
-        full = original_num + lowest_byte;
+        ip_as_num = original_num + lowest_byte;
     }
 
-    var prev_lowest_byte = full & 0b11111111_1111111_00000000_0000000;
-    prev_lowest_byte >>= 16;
-    std.debug.print("Lowest byte {d}\n", .{prev_lowest_byte});
-    print_ip_6(full);
+    print_ip_6(ip_as_num);
 }
 
 pub fn hex_to_dec(cidr: [*:0]const u8) u32 {
@@ -134,22 +132,8 @@ pub fn print_ip(ip: u32) void {
 }
 
 pub fn print_ip_6(ip: u128) void {
-    //           12345678_12345678
     const sz = 0b11111111_11111111;
-    std.debug.print(
-        "CIDR : {b:_>32} split {d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}\n",
-        .{
-            ip,
-            (ip >> 112) & sz,
-            (ip >> 96) & sz,
-            (ip >> 80) & sz,
-            (ip >> 64) & sz,
-            (ip >> 48) & sz,
-            (ip >> 32) & sz,
-            (ip >> 16) & sz,
-            (ip >> 0) & sz,
-        },
-    );
+
     std.debug.print(
         "CIDR : {s}:{s}:{s}:{s}:{s}:{s}:{s}:{s}\n",
         .{
